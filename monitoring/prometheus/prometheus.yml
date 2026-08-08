@@ -1,0 +1,82 @@
+#
+#  This Source Code Form is subject to the terms of the Mozilla Public License,
+#  v. 2.0. If a copy of the MPL was not distributed with this file, You can
+#  obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+#  the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+#
+#  Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+#  graphic logo is a trademark of OpenMRS Inc.
+#
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Docker host metrics
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Container metrics
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # MariaDB metrics
+  - job_name: mariadb
+    static_configs:
+      - targets: ["mysqld-exporter:9104"]
+
+  # Loki internal metrics
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  # Alloy (log collection) internal metrics
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+
+  # OpenMRS HTTP health probe (checks /openmrs/health/alive)
+  - job_name: openmrs-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://api:8080/openmrs/health/alive
+        labels:
+          application: openmrs
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # OpenMRS TCP reachability probe (is Tomcat accepting connections?)
+  - job_name: openmrs-tcp
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+          - api:8080
+        labels:
+          application: openmrs
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

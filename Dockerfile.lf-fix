@@ -1,0 +1,6 @@
+# Patch image: override the bundled startup scripts (which got CRLF line
+# endings on Windows checkouts and break bash) and the WaitForIt helper.
+# Cheap to build - reuses all existing layers from openmrs/openmrs-core:dev.
+FROM openmrs/openmrs-core:dev
+
+COPY --chmod=0755 startup.sh startup-init.sh startup-dev.sh wait-for-it.sh /openmrs/

@@ -1,0 +1,373 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "OpenMRS API Health",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.5 }
+            ]
+          },
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Healthy", "color": "green" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "refId": "A", "expr": "probe_success{job=\"openmrs-health\"}", "legendFormat": "alive" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Port 8080 (TCP)",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.5 }
+            ]
+          },
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "Closed", "color": "red" },
+                "1": { "text": "Open", "color": "green" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "refId": "A", "expr": "probe_success{job=\"openmrs-tcp\"}", "legendFormat": "tcp" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "API availability (24h)",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 95 },
+              { "color": "green", "value": 99 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg_over_time(probe_success{job=~\"openmrs-health|openmrs-tcp\"}[24h]) * 100",
+          "legendFormat": "availability"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Errors (last 15m)",
+      "id": 4,
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 25 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({level=\"error\"}[15m]))",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "supportingQueryType": "metrics"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "DB exporter",
+      "id": 5,
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.5 }
+            ]
+          },
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "Down", "color": "red" },
+                "1": { "text": "Up", "color": "green" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        { "refId": "A", "expr": "up{job=\"mariadb\"}", "legendFormat": "mysqld-exporter" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP probe latency",
+      "id": 6,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": false,
+            "showPoints": "never",
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "stacking": { "mode": "none", "group": "A" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showCalcs": false },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(probe_http_duration_seconds_bucket{job=\"openmrs-health\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(probe_http_duration_seconds_bucket{job=\"openmrs-health\"}[5m])))",
+          "legendFormat": "p99"
+        },
+        {
+          "refId": "avg",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(probe_http_duration_seconds_bucket{job=\"openmrs-health\"}[5m])))",
+          "legendFormat": "p50"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Log volume by level (events/min)",
+      "id": 7,
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 4 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "cpm",
+          "custom": {
+            "axis": "left",
+            "pointDistribution": "none",
+            "showPoints": "never",
+            "lineWidth": 2,
+            "scaleInterpolation": "smooth",
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showCalcs": false },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (level) (rate({level=\"error\"}[1m]) * 60)",
+          "legendFormat": "error",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "supportingQueryType": "metrics"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (level) (rate({level=\"warn\"}[1m]) * 60)",
+          "legendFormat": "warn",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "supportingQueryType": "metrics"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (level) (rate({level=\"info\"}[1m]) * 60)",
+          "legendFormat": "info",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "supportingQueryType": "metrics"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "MariaDB queries per second",
+      "id": 8,
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "reqps",
+          "custom": {
+            "axis": "left",
+            "pointDistribution": "clustered",
+            "showPoints": "never",
+            "lineWidth": 2,
+            "scaleInterpolation": "smooth"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showCalcs": false },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(mysql_global_status_queries[5m])",
+          "legendFormat": "queries"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(mysql_global_status_threads_connected[5m])",
+          "legendFormat": "threads"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "OpenMRS error logs",
+      "id": 9,
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": {
+        "enableLogDetails": true,
+        "showCommonLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{level=~\"error|fatal|panic\"}",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "supportingQueryType": "logs"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["openmrs", "monitoring"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "OpenMRS - Health & Performance",
+  "uid": "openmrs-health",
+  "version": 1,
+  "weekStart": ""
+}

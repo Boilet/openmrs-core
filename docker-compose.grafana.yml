@@ -36,7 +36,7 @@ services:
     grafana:
         image: grafana/grafana:12.3
         ports:
-            - "3000:3000"
+            - "${GRAFANA_HOST_PORT:-3000}:3000"
         environment:
             GF_LOG_LEVEL: warn
             GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-Admin123}

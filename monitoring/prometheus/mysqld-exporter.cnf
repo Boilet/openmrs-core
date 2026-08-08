@@ -1,0 +1,5 @@
+[client]
+user = openmrs
+password = openmrs
+host = db
+port = 3306

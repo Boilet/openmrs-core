@@ -131,6 +131,14 @@ It calls `mvn install` by default. If you would like to customize mvn build argu
 docker compose build --build-arg MVN_ARGS='install -DskipTests'
 ```
 
+> **Windows tip:** keep the repository's shell scripts with LF line endings (`git config core.autocrlf false` before cloning, or renormalize with `git add --renormalize .`), otherwise bash inside the container fails with `invalid option` errors.
+>
+> **Quick start:** `./start-stack.ps1` starts the whole stack (OpenMRS + Grafana + Prometheus) and prints the URLs. `./stop-stack.ps1` stops it. Copy `.env.example` to `.env` to customize ports and passwords.
+
+```bash
+docker compose build --build-arg MVN_ARGS='install -DskipTests'
+```
+
 It is also possible to use the built dev image to run jetty:
 
 ```bash
@@ -200,6 +208,44 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 ```
 
 Grafana will be available at http://localhost:3000. Use admin as username and see docker-compose.grafana.yml for the initial password.
+
+> **Note:** On hosts where `:3000` (or `:8080`, `:8000`, `:9000`, `:3306`, `:9090`) is already in use, all published ports are configurable via environment variables, e.g.:
+>
+> ```bash
+> OMRS_HTTP_HOST_PORT=8081 OMRS_DEBUG_HOST_PORT=8011 OMRS_SCHEDULER_HOST_PORT=9001 \
+> GRAFANA_HOST_PORT=3001 OMRS_DB_HOST_PORT=3307 docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml up -d
+> ```
+>
+> See `.env.example` for the complete list.
+
+### Running with Prometheus
+
+On top of the Grafana stack, OpenMRS ships a Prometheus monitoring overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.prometheus.yml up -d
+```
+
+The overlay adds:
+
+| Service             | Purpose                                                        | Exposes |
+|---------------------|----------------------------------------------------------------|---------|
+| `prometheus`        | Metrics time-series DB with alerting rules                     | :9090   |
+| `node-exporter`     | Host metrics (CPU, memory, disk, network)                      | -       |
+| `cadvisor`          | Container metrics (CPU, memory, disk, network per container)   | -       |
+| `mysqld-exporter`   | MariaDB metrics (queries/s, connections, threads)              | -       |
+| `blackbox-exporter` | HTTP/TCP probes of the OpenMRS health endpoint                 | -       |
+
+Prometheus ships with 6 alerting rules (API down, port closed, DB exporter down, high error log rate, exporter down, host disk >85%) defined in `monitoring/prometheus/alerts.yml`.
+
+Grafana is provisioned with two extra dashboards on top of the log dashboard (all editable from the Grafana UI):
+
+* **OpenMRS - Health & Performance** (`openmrs-health`): API health probes, latency percentiles, log volume by level, error rates and MariaDB query rate.
+* **Docker & Host Infrastructure** (`docker-infra`): host and per-container CPU, memory, network and filesystem.
+
+Prometheus dashboard can be tailored in `monitoring/prometheus/prometheus.yml`; setting `PROMETHEUS_RETENTION` (default `30d`) controls the retention period.
+
+> **Tip:** OpenMRS core does not expose a `/metrics` endpoint yet; application observability is provided through the health-probe metrics and the Loki log pipeline.
 
 ### Scheduler Dashboard
 

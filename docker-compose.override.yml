@@ -10,8 +10,9 @@ version: "3.7"
 
 services:
     db:
-        ports:
-            - "3306:3306"
+        # Uncomment to expose the DB on the host. Use a free port, e.g.:
+        # ports:
+        #     - "${OMRS_DB_HOST_PORT:-3306}:3306"
         restart: "no"
         #volumes:
             # Comment out if DB should be created from scratch
@@ -25,14 +26,14 @@ services:
             cache_from:
                 -   openmrs/openmrs-core:${TAG:-dev}
         ports:
-            - "8080:8080"
-            - "8000:8000"
-            - "9000:9000"
+            - "${OMRS_HTTP_HOST_PORT:-8080}:8080"
+            - "${OMRS_DEBUG_HOST_PORT:-8000}:8000"
+            - "${OMRS_SCHEDULER_HOST_PORT:-9000}:9000"
         environment:
             OMRS_DEV_DEBUG_PORT: ${OMRS_DEV_DEBUG_PORT:-8000}
             OMRS_CREATE_TABLES: ${OMRS_CREATE_TABLES:-true}
             
-            OMRS_BUILD: ${OMRS_BUILD:-true}
+            OMRS_BUILD: ${OMRS_BUILD:-false}
             OMRS_BUILD_GOALS: ${OMRS_BUILD_GOALS:-}
             OMRS_BUILD_ARGS: ${OMRS_BUILD_ARGS:-}
             
