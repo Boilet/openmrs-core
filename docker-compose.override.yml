@@ -25,8 +25,11 @@ services:
             context: .    
             cache_from:
                 -   openmrs/openmrs-core:${TAG:-dev}
+        # El puerto 8080 (HTTP) ya NO se publica directamente al host: usar el overlay
+        # docker-compose.proxy.yml, que expone 8080 (redirect a HTTPS) y 8443 (TLS) a traves
+        # de nginx. Publicar 8080 aca de nuevo reabriria el bypass sin TLS/cookie-hardening
+        # que ese proxy existe para cerrar - ver monitoring/proxy/default.conf.template.
         ports:
-            - "${OMRS_HTTP_HOST_PORT:-8080}:8080"
             - "${OMRS_DEBUG_HOST_PORT:-8000}:8000"
             - "${OMRS_SCHEDULER_HOST_PORT:-9000}:9000"
         environment:

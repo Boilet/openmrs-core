@@ -14,17 +14,19 @@ if (Test-Path .env) {
     }
 }
 
-$COMPOSE = 'docker-compose.yml', 'docker-compose.override.yml', 'docker-compose.grafana.yml', 'docker-compose.prometheus.yml'
+$COMPOSE = 'docker-compose.yml', 'docker-compose.override.yml', 'docker-compose.grafana.yml', 'docker-compose.proxy.yml', 'docker-compose.prometheus.yml'
 $ARGS = @()
 
 if ($Build) {
     $ARGS += 'build', '--build-arg', 'MVN_ARGS=install -DskipTests'
     & docker compose -f $COMPOSE[0] -f $COMPOSE[1] build --build-arg 'MVN_ARGS=install -DskipTests'
 }
-& docker compose -f $COMPOSE[0] -f $COMPOSE[1] -f $COMPOSE[2] -f $COMPOSE[3] up -d
+& docker compose -f $COMPOSE[0] -f $COMPOSE[1] -f $COMPOSE[2] -f $COMPOSE[3] -f $COMPOSE[4] up -d
 
 Write-Host "`nStack started:"
-Write-Host "  OpenMRS UI     : http://localhost:$($env:OMRS_HTTP_HOST_PORT ?? '8083')/openmrs  (admin / $($env:OMRS_ADMIN_USER_PASSWORD ?? 'Admin123'))"
+Write-Host "  OpenMRS UI     : https://localhost:$($env:OMRS_HTTPS_HOST_PORT ?? '8443')/openmrs  (admin / $($env:OMRS_ADMIN_USER_PASSWORD ?? 'Admin123'))"
+Write-Host "                   Certificado autofirmado de dev: el navegador va a advertir la primera vez, aceptar la excepcion."
+Write-Host "                   http://localhost:$($env:OMRS_HTTP_HOST_PORT ?? '8083')/openmrs redirige automaticamente a HTTPS."
 Write-Host "  Scheduler      : http://localhost:$($env:OMRS_SCHEDULER_HOST_PORT ?? '9003')"
 Write-Host "  Grafana        : http://localhost:$($env:GRAFANA_HOST_PORT ?? '3010')  (admin / $($env:GRAFANA_ADMIN_PASSWORD ?? 'Admin123'))"
 Write-Host "  Prometheus     : http://localhost:$($env:PROMETHEUS_HOST_PORT ?? '9101')"

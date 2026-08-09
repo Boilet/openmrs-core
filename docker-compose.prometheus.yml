@@ -9,6 +9,10 @@
 # Overlay that adds Prometheus monitoring to the OpenMRS stack.
 # Usage (from the repository root):
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.prometheus.yml up -d
+#
+# Include docker-compose.proxy.yml too so blackbox-exporter can reach the `proxy` service and
+# run the two security control checks (proxy-http-redirect-check, proxy-secure-cookie-check):
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.proxy.yml -f docker-compose.prometheus.yml up -d
 services:
     prometheus:
         image: prom/prometheus:v3.3.1
@@ -63,6 +67,10 @@ services:
 
     blackbox-exporter:
         image: prom/blackbox-exporter:v0.26.0
+        command:
+            - --config.file=/etc/blackbox_exporter/blackbox.yml
+        volumes:
+            - ./monitoring/prometheus/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
         restart: unless-stopped
 
 volumes:

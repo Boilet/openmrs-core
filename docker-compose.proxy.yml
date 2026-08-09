@@ -1,0 +1,45 @@
+version: "3.7"
+
+#    This Source Code Form is subject to the terms of the Mozilla Public License,
+#    v. 2.0. If a copy of the MPL was not distributed with this file, You can
+#    obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+#    the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+#
+#    Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+#    graphic logo is a trademark of OpenMRS Inc.
+
+# Reverse-proxy TLS-terminante delante de `api`: unico punto de entrada HTTP(S) publicado al
+# host para OpenMRS. Ver monitoring/proxy/default.conf.template para el detalle de por que
+# existe (cierra los riesgos "HTTP sin TLS" y "cookie de sesion sin Secure/SameSite garantizados"
+# documentados en openmrs-module-seguimientooncologico/docs/seguridad.md).
+#
+# Uso: agregar este overlay a cualquier `docker compose -f docker-compose.yml -f
+# docker-compose.override.yml -f docker-compose.proxy.yml up -d ...`. A partir de este overlay,
+# `api` deja de publicar su puerto 8080 al host (ver docker-compose.override.yml) - el proxy es
+# el unico camino de entrada.
+services:
+    proxy-certs:
+        image: alpine:3.23
+        volumes:
+            - ./monitoring/proxy/gen-dev-cert.sh:/gen-dev-cert.sh:ro
+            - proxy-certs:/certs
+        entrypoint: ["/bin/sh", "/gen-dev-cert.sh"]
+
+    proxy:
+        image: nginx:1.27-alpine
+        depends_on:
+            proxy-certs:
+                condition: service_completed_successfully
+        ports:
+            - "${OMRS_HTTP_HOST_PORT:-8080}:8080"
+            - "${OMRS_HTTPS_HOST_PORT:-8443}:8443"
+        environment:
+            HTTPS_PORT: ${OMRS_HTTPS_HOST_PORT:-8443}
+            UPSTREAM: api:8080
+        volumes:
+            - ./monitoring/proxy/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+            - proxy-certs:/etc/nginx/certs:ro
+        restart: unless-stopped
+
+volumes:
+    proxy-certs:

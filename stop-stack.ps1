@@ -10,5 +10,5 @@ if (Test-Path .env) {
     }
 }
 
-& docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.prometheus.yml stop
+& docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.proxy.yml -f docker-compose.prometheus.yml stop
 Write-Host "Stack stopped. Data is kept in the named volumes (db-data, openmrs-data, loki-data, grafana-data, prometheus-data)."

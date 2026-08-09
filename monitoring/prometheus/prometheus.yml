@@ -80,3 +80,45 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+
+  # Control de seguridad: el puerto HTTP del proxy (8080) debe SIEMPRE redirigir a HTTPS, nunca
+  # servir contenido en claro. Requiere docker-compose.proxy.yml en el mismo `docker compose up`.
+  # Si probe_success cae a 0, ver la alerta InsecureHTTPExposureDetected en alerts.yml.
+  - job_name: proxy-http-redirect-check
+    metrics_path: /probe
+    params:
+      module: [http_redirect_to_https]
+    static_configs:
+      - targets:
+          - http://proxy:8080/openmrs
+        labels:
+          application: openmrs-proxy
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Control de seguridad: el Set-Cookie de sesion servido por HTTPS debe traer siempre
+  # Secure + HttpOnly + SameSite (ver monitoring/proxy/default.conf.template). Si probe_success
+  # cae a 0, ver la alerta SessionCookieMissingSecurityFlags en alerts.yml.
+  - job_name: proxy-secure-cookie-check
+    metrics_path: /probe
+    params:
+      module: [https_secure_cookie]
+    static_configs:
+      - targets:
+          # index.htm (no autenticado) responde 200 y siempre trae Set-Cookie; el health-check
+          # (/openmrs/health/alive) no sirve aca porque ese endpoint no abre sesion.
+          - https://proxy:8443/openmrs/index.htm
+        labels:
+          application: openmrs-proxy
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

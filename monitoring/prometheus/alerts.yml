@@ -46,6 +46,30 @@ groups:
           summary: "High error log rate"
           description: "OpenMRS is logging more than 30 errors per minute."
 
+      # Controles de seguridad del proxy TLS (docker-compose.proxy.yml). Ambos existen porque
+      # docs/seguridad.md del modulo seguimientooncologico acepto "HTTP sin TLS" y "cookie de
+      # sesion sin Secure/SameSite garantizados" como riesgos fuera del control del modulo,
+      # mitigados por un wrapper de infraestructura en vez del codigo del core. Si el wrapper se
+      # cae o alguien lo bypassea (ej. republicando el puerto 8080 de `api` directo al host),
+      # estas alertas avisan en vez de dejarlo pasar en silencio.
+      - alert: InsecureHTTPExposureDetected
+        expr: probe_success{job="proxy-http-redirect-check"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "El puerto HTTP del proxy no esta redirigiendo a HTTPS"
+          description: "{{ $labels.instance }} deberia responder 301/302 hacia HTTPS y no lo esta haciendo: credenciales (Basic Auth) o la cookie de sesion podrian estar viajando en texto plano. Revisar monitoring/proxy/default.conf.template y que nadie haya vuelto a publicar el puerto 8080 de `api` directo al host en docker-compose.override.yml."
+
+      - alert: SessionCookieMissingSecurityFlags
+        expr: probe_success{job="proxy-secure-cookie-check"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La cookie de sesion no trae Secure/HttpOnly/SameSite"
+          description: "{{ $labels.instance }} dejo de agregar los atributos de seguridad esperados al Set-Cookie de sesion. Revisar proxy_cookie_flags en monitoring/proxy/default.conf.template; si el proxy esta bien, el problema esta upstream en el cookie-config de openmrs-core (web.xml/context.xml)."
+
   - name: infrastructure
     rules:
       - alert: ExporterDown

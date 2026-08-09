@@ -133,7 +133,7 @@ docker compose build --build-arg MVN_ARGS='install -DskipTests'
 
 > **Windows tip:** keep the repository's shell scripts with LF line endings (`git config core.autocrlf false` before cloning, or renormalize with `git add --renormalize .`), otherwise bash inside the container fails with `invalid option` errors.
 >
-> **Quick start:** `./start-stack.ps1` starts the whole stack (OpenMRS + Grafana + Prometheus) and prints the URLs. `./stop-stack.ps1` stops it. Copy `.env.example` to `.env` to customize ports and passwords.
+> **Quick start:** `./start-stack.ps1` starts the whole stack (OpenMRS + TLS proxy + Grafana + Prometheus) and prints the URLs. `./stop-stack.ps1` stops it. Copy `.env.example` to `.env` to customize ports and passwords. The OpenMRS UI is served over HTTPS through a dev proxy (self-signed cert, browser will warn once) - see "Running with a TLS proxy" below for why.
 
 ```bash
 docker compose build --build-arg MVN_ARGS='install -DskipTests'
@@ -199,6 +199,44 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 
 If you change backend, you need to rebuild the search index by going to Legacy UI -> Administration -> Search Index. Alternatively, you can rebuild the search index using the `searchindexupdate` REST endpoint.
 
+### Running with a TLS proxy
+
+`api` does not publish its HTTP port to the host by default anymore. Instead, an nginx reverse
+proxy sits in front of it and is the only published entry point:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.proxy.yml up -d
+```
+
+* `http://localhost:${OMRS_HTTP_HOST_PORT:-8083}` (default `8083`) only ever answers with a
+  301 redirect to HTTPS - it never proxies a request in the clear.
+* `https://localhost:${OMRS_HTTPS_HOST_PORT:-8446}` (default `8446`) is the real entry point.
+  It terminates TLS with a self-signed dev certificate (generated once by the `proxy-certs`
+  init container into a named volume - see `monitoring/proxy/gen-dev-cert.sh`) and forces
+  `Secure`, `HttpOnly` and `SameSite=Lax` on every `Set-Cookie` the backend sends via
+  `proxy_cookie_flags`, regardless of the core's own `web.xml`/`context.xml` cookie config.
+  Your browser will warn about the self-signed certificate the first time - accept the
+  exception, or for production replace the `proxy-certs` volume contents with a real
+  certificate (Let's Encrypt, a corporate CA, etc.).
+
+Why this exists: `useHttpOnly="false"` in `webapp/src/main/webapp/META-INF/context.xml`
+contradicts the `http-only=true` set in `web.xml`'s `cookie-config` (the latter wins today, but
+it's a fragile, upstream-inherited inconsistency), and neither file sets `SameSite` explicitly -
+that protection currently relies entirely on browsers' default behavior for unspecified cookies,
+not on anything OpenMRS/Tomcat configures. Rather than patch vendored core files (which get
+overwritten by every upstream sync and aren't even guaranteed to take effect unless `OMRS_BUILD`
+rebuilds the WAR from this checkout), this proxy wrapper guarantees the security-relevant
+response headers at the network boundary instead - see
+`openmrs-module-seguimientooncologico/docs/seguridad.md` for the full writeup. If you run
+`docker-compose.prometheus.yml` alongside this overlay, two extra alerts
+(`InsecureHTTPExposureDetected`, `SessionCookieMissingSecurityFlags`) continuously verify the
+proxy is actually doing this and page if it silently stops.
+
+> If you need `api`'s HTTP port published directly to the host (bypassing the proxy, e.g. for a
+> quick `curl` while debugging), add `ports: ["${OMRS_HTTP_HOST_PORT:-8080}:8080"]` back to the
+> `api` service in a local, uncommitted override file - just know that path skips both the TLS
+> termination and the cookie-flag enforcement described above.
+
 ### Running with Grafana
 
 OpenMRS can run with Grafana for monitoring logs. You can run it with:
@@ -209,21 +247,23 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 
 Grafana will be available at http://localhost:3000. Use admin as username and see docker-compose.grafana.yml for the initial password.
 
-> **Note:** On hosts where `:3000` (or `:8080`, `:8000`, `:9000`, `:3306`, `:9090`) is already in use, all published ports are configurable via environment variables, e.g.:
+> **Note:** On hosts where `:3000` (or `:8446`, `:8083`, `:8000`, `:9000`, `:3306`, `:9090`) is already in use, all published ports are configurable via environment variables, e.g.:
 >
 > ```bash
-> OMRS_HTTP_HOST_PORT=8081 OMRS_DEBUG_HOST_PORT=8011 OMRS_SCHEDULER_HOST_PORT=9001 \
-> GRAFANA_HOST_PORT=3001 OMRS_DB_HOST_PORT=3307 docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml up -d
+> OMRS_HTTP_HOST_PORT=8081 OMRS_HTTPS_HOST_PORT=8444 OMRS_DEBUG_HOST_PORT=8011 OMRS_SCHEDULER_HOST_PORT=9001 \
+> GRAFANA_HOST_PORT=3001 OMRS_DB_HOST_PORT=3307 docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.proxy.yml -f docker-compose.grafana.yml up -d
 > ```
 >
 > See `.env.example` for the complete list.
 
 ### Running with Prometheus
 
-On top of the Grafana stack, OpenMRS ships a Prometheus monitoring overlay:
+On top of the Grafana stack, OpenMRS ships a Prometheus monitoring overlay. Include the TLS
+proxy overlay too so the two security control checks below (`proxy-http-redirect-check`,
+`proxy-secure-cookie-check`) have a `proxy` service to probe:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.prometheus.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.proxy.yml -f docker-compose.prometheus.yml up -d
 ```
 
 The overlay adds:
@@ -234,9 +274,14 @@ The overlay adds:
 | `node-exporter`     | Host metrics (CPU, memory, disk, network)                      | -       |
 | `cadvisor`          | Container metrics (CPU, memory, disk, network per container)   | -       |
 | `mysqld-exporter`   | MariaDB metrics (queries/s, connections, threads)              | -       |
-| `blackbox-exporter` | HTTP/TCP probes of the OpenMRS health endpoint                 | -       |
+| `blackbox-exporter` | HTTP/TCP probes of the OpenMRS health endpoint and TLS proxy   | -       |
 
-Prometheus ships with 6 alerting rules (API down, port closed, DB exporter down, high error log rate, exporter down, host disk >85%) defined in `monitoring/prometheus/alerts.yml`.
+Prometheus ships with 8 alerting rules (API down, port closed, DB exporter down, high error log
+rate, exporter down, host disk >85%, plus two security controls -
+`InsecureHTTPExposureDetected` and `SessionCookieMissingSecurityFlags` - that fire if the TLS
+proxy's HTTP->HTTPS redirect or its cookie-flag enforcement ever stop working) defined in
+`monitoring/prometheus/alerts.yml`, using the custom blackbox modules in
+`monitoring/prometheus/blackbox.yml`.
 
 Grafana is provisioned with two extra dashboards on top of the log dashboard (all editable from the Grafana UI):
 

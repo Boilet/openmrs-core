@@ -1,0 +1,53 @@
+# Reverse-proxy TLS delante de `api` (OpenMRS/Tomcat) - unico punto de entrada HTTP(S)
+# publicado al host (ver docker-compose.proxy.yml). Sustituido por envsubst al arrancar
+# (imagen oficial nginx:alpine, /etc/nginx/templates/*.template -> /etc/nginx/conf.d/*.conf);
+# HTTPS_PORT y UPSTREAM vienen de las variables de entorno del servicio `proxy`.
+#
+# Resuelve dos riesgos documentados en openmrs-module-seguimientooncologico/docs/seguridad.md:
+#   1. HTTP sin TLS: el puerto 8080 SOLO redirige a HTTPS, nunca proxea contenido en claro.
+#      Basic Auth y la cookie de sesion nunca salen del host sin cifrar.
+#   2. Cookie de sesion sin Secure/SameSite garantizados por el core (context.xml tiene
+#      useHttpOnly="false", contradicho por el cookie-config de web.xml pero sin SameSite
+#      explicito en ningun lado): `proxy_cookie_flags` fuerza los tres atributos en TODO
+#      Set-Cookie que salga hacia el cliente, sin depender de que se corrija upstream.
+
+server {
+	listen 8080;
+	server_name _;
+	return 301 https://$host:${HTTPS_PORT}$request_uri;
+}
+
+server {
+	listen 8443 ssl;
+	server_name _;
+
+	ssl_certificate     /etc/nginx/certs/dev.crt;
+	ssl_certificate_key /etc/nginx/certs/dev.key;
+	ssl_protocols TLSv1.2 TLSv1.3;
+	ssl_ciphers HIGH:!aNULL:!MD5;
+	ssl_prefer_server_ciphers on;
+
+	add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+	add_header X-Content-Type-Options "nosniff" always;
+	add_header X-Frame-Options "DENY" always;
+	add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+	client_max_body_size 20m;
+
+	location = /nginx-health {
+		return 200 "ok\n";
+		add_header Content-Type text/plain;
+	}
+
+	location / {
+		proxy_pass http://${UPSTREAM};
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto https;
+
+		# Fuerza Secure + HttpOnly + SameSite=Lax en cualquier Set-Cookie del backend,
+		# agregando el atributo si falta y sin duplicarlo si ya viene presente.
+		proxy_cookie_flags ~ secure httponly samesite=lax;
+	}
+}
