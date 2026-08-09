@@ -226,11 +226,25 @@ that protection currently relies entirely on browsers' default behavior for unsp
 not on anything OpenMRS/Tomcat configures. Rather than patch vendored core files (which get
 overwritten by every upstream sync and aren't even guaranteed to take effect unless `OMRS_BUILD`
 rebuilds the WAR from this checkout), this proxy wrapper guarantees the security-relevant
-response headers at the network boundary instead - see
-`openmrs-module-seguimientooncologico/docs/seguridad.md` for the full writeup. If you run
-`docker-compose.prometheus.yml` alongside this overlay, two extra alerts
+response headers at the network boundary instead - see `docs/arquitectura-seguridad.md` for the
+full architecture (diagram, component responsibilities, what it does and doesn't cover, and a
+runbook) and `openmrs-module-seguimientooncologico/docs/seguridad.md` for the audit that motivated
+it. If you run `docker-compose.prometheus.yml` alongside this overlay, two extra alerts
 (`InsecureHTTPExposureDetected`, `SessionCookieMissingSecurityFlags`) continuously verify the
 proxy is actually doing this and page if it silently stops.
+
+To check it on demand (before touching the proxy config, or to audit a running deployment) run
+the smoke test instead of waiting for an alert:
+
+```bash
+OMRS_HTTP_HOST_PORT=8083 OMRS_HTTPS_HOST_PORT=8446 \
+  bash monitoring/proxy/test-proxy-security.sh --network openmrs-core_default
+```
+
+It checks the HTTP->HTTPS redirect, the three cookie flags and the security headers, plus (with
+`--network`) a negative control that confirms hitting `api` directly - bypassing the proxy - does
+lack `Secure`/`SameSite`, proving the check can actually detect an insecure state and isn't just
+passing by default.
 
 > If you need `api`'s HTTP port published directly to the host (bypassing the proxy, e.g. for a
 > quick `curl` while debugging), add `ports: ["${OMRS_HTTP_HOST_PORT:-8080}:8080"]` back to the
