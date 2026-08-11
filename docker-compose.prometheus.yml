@@ -1,0 +1,77 @@
+#    This Source Code Form is subject to the terms of the Mozilla Public License,
+#    v. 2.0. If a copy of the MPL was not distributed with this file, You can
+#    obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+#    the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+#
+#    Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+#    graphic logo is a trademark of OpenMRS Inc.
+
+# Overlay that adds Prometheus monitoring to the OpenMRS stack.
+# Usage (from the repository root):
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.prometheus.yml up -d
+#
+# Include docker-compose.proxy.yml too so blackbox-exporter can reach the `proxy` service and
+# run the two security control checks (proxy-http-redirect-check, proxy-secure-cookie-check):
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.grafana.yml -f docker-compose.proxy.yml -f docker-compose.prometheus.yml up -d
+services:
+    prometheus:
+        image: prom/prometheus:v3.3.1
+        command:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+            - --web.enable-lifecycle
+            - --web.enable-remote-write-receiver
+        ports:
+            - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+        volumes:
+            - ./monitoring/prometheus:/etc/prometheus
+            - prometheus-data:/prometheus
+        depends_on:
+            - api
+        restart: unless-stopped
+
+    node-exporter:
+        image: prom/node-exporter:v1.9.1
+        command:
+            - --path.rootfs=/host
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --no-collector.systemd
+        volumes:
+            - /proc:/host/proc:ro
+            - /sys:/host/sys:ro
+            - /:/host:ro
+        restart: unless-stopped
+
+    cadvisor:
+        image: gcr.io/cadvisor/cadvisor:v0.50.0
+        volumes:
+            - /:/rootfs:ro
+            - /var/run:/var/run:ro
+            - /sys:/sys:ro
+            - /var/lib/docker/:/var/lib/docker:ro
+            - /dev/disk/:/dev/disk:ro
+        privileged: true
+        devices:
+            - /dev/kmsg
+        restart: unless-stopped
+
+    mysqld-exporter:
+        image: prom/mysqld-exporter:v0.15.1
+        command:
+            - --config.my-cnf=/etc/mysqld-exporter/my.cnf
+        volumes:
+            - ./monitoring/prometheus/mysqld-exporter.cnf:/etc/mysqld-exporter/my.cnf:ro
+        restart: unless-stopped
+
+    blackbox-exporter:
+        image: prom/blackbox-exporter:v0.26.0
+        command:
+            - --config.file=/etc/blackbox_exporter/blackbox.yml
+        volumes:
+            - ./monitoring/prometheus/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+        restart: unless-stopped
+
+volumes:
+    prometheus-data:

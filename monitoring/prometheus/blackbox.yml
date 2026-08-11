@@ -1,0 +1,58 @@
+#
+#  This Source Code Form is subject to the terms of the Mozilla Public License,
+#  v. 2.0. If a copy of the MPL was not distributed with this file, You can
+#  obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+#  the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+#
+#  Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+#  graphic logo is a trademark of OpenMRS Inc.
+#
+# Modulos de blackbox_exporter. Incluye los defaults de la imagen (http_2xx, tcp_connect) mas
+# dos modulos de control agregados junto con el proxy TLS (docker-compose.proxy.yml) para
+# detectar si alguno de los dos wrappers de seguridad deja de aplicarse por mala operacion:
+# reconfiguracion del proxy, alguien publicando el puerto 8080 de `api` de nuevo al host, etc.
+# Ver monitoring/prometheus/prometheus.yml (jobs proxy-http-redirect-check y
+# proxy-secure-cookie-check) y alerts.yml (InsecureHTTPExposureDetected,
+# SessionCookieMissingSecurityFlags).
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  # El puerto 8080 del proxy debe SIEMPRE redirigir a HTTPS (301/302/307/308) y nunca servir
+  # contenido en claro. Si este probe falla (probe_success=0), algo esta sirviendo HTTP plano
+  # donde deberia haber solo un redirect - ver alerta InsecureHTTPExposureDetected.
+  http_redirect_to_https:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [301, 302, 307, 308]
+      follow_redirects: false
+
+  # El Set-Cookie de la sesion servida por HTTPS debe traer Secure + HttpOnly + SameSite.
+  # insecure_skip_verify porque en dev el certificado es autofirmado (ver gen-dev-cert.sh);
+  # en un despliegue con CA real, quitar ese flag para tambien validar la cadena de confianza.
+  https_secure_cookie:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      tls_config:
+        insecure_skip_verify: true
+      fail_if_header_not_matches:
+        - header: Set-Cookie
+          regexp: "(?i)secure"
+          allow_missing: false
+        - header: Set-Cookie
+          regexp: "(?i)httponly"
+          allow_missing: false
+        - header: Set-Cookie
+          regexp: "(?i)samesite"
+          allow_missing: false

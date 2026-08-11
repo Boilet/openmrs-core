@@ -27,13 +27,20 @@ services:
 
     api:
         image: openmrs/openmrs-core:${TAG:-nightly}
+        depends_on:
+            - db
         build:
             context: .
             cache_from:
                 - openmrs/openmrs-core:${TAG:-dev}
                 - openmrs/openmrs-core:${TAG:-nightly}
-        ports:
-            - "8080:8080"
+        # Sin publicacion de puerto al host por defecto: usar el overlay docker-compose.proxy.yml,
+        # que expone 8080 (redirect a HTTPS) y 8443 (TLS) via nginx delante de este servicio. Ese
+        # proxy fuerza Secure/HttpOnly/SameSite en la cookie de sesion (docs/seguridad.md del
+        # modulo seguimientooncologico) - publicar 8080 aca de nuevo reabre ese bypass. Para un
+        # `docker compose up` sin overlays (fuera del flujo de start-stack.ps1), agregar de vuelta
+        # `ports: ["${OMRS_HTTP_HOST_PORT:-8080}:8080"]` es valido: solo hay que saber que sin el
+        # proxy la sesion viaja sin las garantias de cookie/TLS de ese wrapper.
         environment:
             OMRS_DB: ${OMRS_DB:-mariadb}
             OMRS_DB_HOSTNAME: ${OMRS_DB_HOSTNAME:-db}
@@ -43,10 +50,11 @@ services:
             OMRS_ADMIN_USER_PASSWORD: ${OMRS_ADMIN_USER_PASSWORD:-Admin123}
             OMRS_ADMIN_PASSWORD_LOCKED: ${OMRS_ADMIN_PASSWORD_LOCKED:-true}
         healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs"]
-            interval: 3s
+            test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs/health/alive"]
+            interval: 5s
             timeout: 5s
             retries: 3
+            start_period: 1m
         volumes:
             - openmrs-data:/openmrs/data/
 

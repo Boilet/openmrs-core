@@ -10,8 +10,8 @@ version: "3.7"
 
 services:
     db:
-        ports:
-            - "3306:3306"
+        # No se publica al host: Windows/Hyper-V bloquea el bind a 3306 por permisos en esta
+        # maquina, y no hace falta acceso externo (api habla con "db" por la red interna).
         restart: "no"
         #volumes:
             # Comment out if DB should be created from scratch
@@ -24,17 +24,39 @@ services:
             context: .    
             cache_from:
                 -   openmrs/openmrs-core:${TAG:-dev}
-        ports:
-            - "8080:8080"
-            - "8000:8000"
+        # !override reemplaza la lista de puertos del docker-compose.yml base en vez de
+        # concatenarla (Compose por defecto agrega, no reemplaza, los items de "ports").
+        # 8080 NO se publica aqui a proposito (igual que en el docker-compose.yml base): el unico
+        # camino de entrada HTTP(S) es el overlay docker-compose.proxy.yml (nginx con TLS +
+        # cookie hardening, puertos configurables via OMRS_HTTP_HOST_PORT/OMRS_HTTPS_HOST_PORT en
+        # .env). Publicar 8080 directo aca de nuevo reabriria el bypass sin TLS que ese proxy
+        # existe para cerrar (docs/seguridad.md del modulo seguimientooncologico). El puerto de
+        # debug si se remapea: 8000 ya esta ocupado por otro servicio local en esta maquina.
+        ports: !override
+            - "${OMRS_DEBUG_HOST_PORT:-8013}:8000"
         environment:
             OMRS_DEV_DEBUG_PORT: ${OMRS_DEV_DEBUG_PORT:-8000}
             OMRS_CREATE_TABLES: ${OMRS_CREATE_TABLES:-true}
-            
+
             OMRS_BUILD: ${OMRS_BUILD:-true}
             OMRS_BUILD_GOALS: ${OMRS_BUILD_GOALS:-}
             OMRS_BUILD_ARGS: ${OMRS_BUILD_ARGS:-}
         volumes:
             - ./:/openmrs_core
             - ./target/data:/openmrs/data/
+            # Semilla de modulos para desarrollo local (webservices.rest + seguimientooncologico):
+            # se copia a data/modules en cada arranque via startup-init.sh, sobreviviendo tanto al
+            # wipe de esa carpeta como a la recreacion del contenedor.
+            - ./dev-modules-seed:/openmrs/distribution/openmrs_modules
+        # El healthcheck base (docker-compose.yml) no tiene start_period y usa un timeout de 5s:
+        # durante la carga de modulos "/openmrs" queda bloqueado en el filtro de inicializacion
+        # mas de 5s, el check falla 3 veces seguidas y algo (Docker Desktop) mata y reinicia el
+        # contenedor en loop antes de que termine de arrancar. --max-time evita que el propio
+        # curl quede colgado indefinidamente, y start_period le da margen real de arranque.
+        healthcheck:
+            test: ["CMD", "curl", "-f", "--max-time", "10", "http://localhost:8080/openmrs/health/alive"]
+            interval: 10s
+            timeout: 15s
+            retries: 5
+            start_period: 300s
         restart: "no"

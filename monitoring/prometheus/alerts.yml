@@ -1,0 +1,91 @@
+#
+#  This Source Code Form is subject to the terms of the Mozilla Public License,
+#  v. 2.0. If a copy of the MPL was not distributed with this file, You can
+#  obtain one at http://mozilla.org/MPL/2.0/. OpenMRS is also distributed under
+#  the terms of the Healthcare Disclaimer located at http://openmrs.org/license.
+#
+#  Copyright (C) OpenMRS Inc. OpenMRS is a registered trademark and the OpenMRS
+#  graphic logo is a trademark of OpenMRS Inc.
+#
+groups:
+  - name: openmrs
+    rules:
+      - alert: OpenMRSApiDown
+        expr: probe_success{job="openmrs-health"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenMRS API is unreachable"
+          description: "The health probe to {{ $labels.instance }} has failed for more than 2 minutes."
+
+      - alert: OpenMRSPortClosed
+        expr: probe_success{job="openmrs-tcp"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenMRS Tomcat port closed"
+          description: "TCP probe to {{ $labels.instance }} failed for more than 2 minutes."
+
+      - alert: DatabaseUnreachable
+        expr: up{job="mariadb"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MariaDB exporter is down"
+          description: "Cannot collect database metrics. Check the mysqld-exporter container."
+
+      - alert: HighErrorLogRate
+        expr: sum(rate({level="error"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error log rate"
+          description: "OpenMRS is logging more than 30 errors per minute."
+
+      # Controles de seguridad del proxy TLS (docker-compose.proxy.yml). Ambos existen porque
+      # docs/seguridad.md del modulo seguimientooncologico acepto "HTTP sin TLS" y "cookie de
+      # sesion sin Secure/SameSite garantizados" como riesgos fuera del control del modulo,
+      # mitigados por un wrapper de infraestructura en vez del codigo del core. Si el wrapper se
+      # cae o alguien lo bypassea (ej. republicando el puerto 8080 de `api` directo al host),
+      # estas alertas avisan en vez de dejarlo pasar en silencio.
+      - alert: InsecureHTTPExposureDetected
+        expr: probe_success{job="proxy-http-redirect-check"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "El puerto HTTP del proxy no esta redirigiendo a HTTPS"
+          description: "{{ $labels.instance }} deberia responder 301/302 hacia HTTPS y no lo esta haciendo: credenciales (Basic Auth) o la cookie de sesion podrian estar viajando en texto plano. Revisar monitoring/proxy/default.conf.template y que nadie haya vuelto a publicar el puerto 8080 de `api` directo al host en docker-compose.override.yml."
+
+      - alert: SessionCookieMissingSecurityFlags
+        expr: probe_success{job="proxy-secure-cookie-check"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La cookie de sesion no trae Secure/HttpOnly/SameSite"
+          description: "{{ $labels.instance }} dejo de agregar los atributos de seguridad esperados al Set-Cookie de sesion. Revisar proxy_cookie_flags en monitoring/proxy/default.conf.template; si el proxy esta bien, el problema esta upstream en el cookie-config de openmrs-core (web.xml/context.xml)."
+
+  - name: infrastructure
+    rules:
+      - alert: ExporterDown
+        expr: up{job=~"node|cadvisor|blackbox|loki|alloy"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Exporter {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.job }} for more than 2 minutes."
+
+      - alert: HostDiskAlmostFull
+        expr: (1 - max without (mountpoint, device) (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host disk usage above 85%"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has more than 85% used."
