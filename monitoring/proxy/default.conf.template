@@ -10,6 +10,14 @@
 #      useHttpOnly="false", contradicho por el cookie-config de web.xml pero sin SameSite
 #      explicito en ningun lado): `proxy_cookie_flags` fuerza los tres atributos en TODO
 #      Set-Cookie que salga hacia el cliente, sin depender de que se corrija upstream.
+#   3. /ws/rest/v1/systemsetting servido SIN autenticacion (ver el bloque `location` mas abajo).
+
+# Limitacion de tasa del unico endpoint anonimo del modulo (el enlace del paciente a su
+# teleconsulta). El token tiene 256 bits de entropia y se busca por hash, asi que no hay
+# enumeracion posible: esto no protege contra adivinar el token, protege contra que ese endpoint
+# se use para saturar la base de datos. 30 peticiones por minuto por IP es holgado para un
+# paciente que recarga su sala y ridiculo para un atacante.
+limit_req_zone $binary_remote_addr zone=telemedicina_invitado:1m rate=30r/m;
 
 server {
 	listen 8080;
@@ -37,6 +45,46 @@ server {
 	location = /nginx-health {
 		return 200 "ok\n";
 		add_header Content-Type text/plain;
+	}
+
+	# BLOQUEADO: /ws/rest/v1/systemsetting sirve las propiedades globales de OpenMRS SIN exigir
+	# autenticacion en esta version de webservices.rest (3.5.0). Comprobado atacando el entorno
+	# real: un cliente anonimo lee cualquier propiedad por nombre y puede listarlas todas
+	# paginadas -- hoy incluye `mail.password`. El recurso upstream declara
+	# getRequiredGetPrivilege() = "Get Global Properties", pero su `retrieve` no lo aplica: se
+	# probo crear ese privilegio (faltaba en la instancia) y la fuga persistio.
+	#
+	# Ver openmrs-module-seguimientooncologico/docs/auditoria-seguridad-telemedicina.md §7.1.
+	#
+	# La aplicacion cliente de este proyecto NO usa este recurso (tiene su propio
+	# `configuracion.json`, gateado por privilegio), asi que bloquearlo no rompe nada aca. Si un
+	# despliegue instala un frontend que si lo necesite (p.ej. OpenMRS 3.x/O3), quitar este bloque
+	# y aceptar el riesgo conscientemente, o parchear webservices.rest.
+	location ^~ /openmrs/ws/rest/v1/systemsetting {
+		# Se bloquea SOLO la lectura, que es la que no exige autenticacion. La escritura
+		# (POST/DELETE) si comprueba el privilegio "Manage Global Properties" en el backend, asi que
+		# dejarla pasar no abre nada y evita romper la administracion legitima.
+		limit_except POST DELETE PUT { deny all; }
+
+		proxy_pass http://${UPSTREAM};
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto https;
+		proxy_cookie_flags ~ secure httponly samesite=lax;
+	}
+
+	# Enlace de la teleconsulta del paciente: unico endpoint del backend que atiende sin
+	# autenticacion, por lo que es el unico que necesita limitacion de tasa (ver limit_req_zone).
+	location ^~ /openmrs/module/seguimientoOncologico/telemedicinaInvitado.json {
+		limit_req zone=telemedicina_invitado burst=10 nodelay;
+
+		proxy_pass http://${UPSTREAM};
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto https;
+		proxy_cookie_flags ~ secure httponly samesite=lax;
 	}
 
 	location / {

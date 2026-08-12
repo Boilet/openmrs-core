@@ -23,6 +23,10 @@ services:
         volumes:
             - ./monitoring/proxy/gen-dev-cert.sh:/gen-dev-cert.sh:ro
             - proxy-certs:/certs
+            # Exporta la CA local generada dentro del contenedor a un bind mount real en el repo,
+            # para que el host pueda importarla una sola vez a su almacen de confianza (sin esto,
+            # no habria forma de sacar la CA del volumen interno de Docker) - ver gen-dev-cert.sh.
+            - ./monitoring/proxy/ca:/ca-export
         entrypoint: ["/bin/sh", "/gen-dev-cert.sh"]
 
     proxy:

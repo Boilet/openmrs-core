@@ -96,9 +96,12 @@ flowchart TB
 
 **No resuelve (limitaciones conocidas, documentadas a propósito en vez de dejarlas implícitas):**
 
-- El certificado de desarrollo es autofirmado — el navegador/webview va a advertir la primera vez.
-  Para un despliegue real, reemplazar el contenido del volumen `proxy-certs` por un certificado de
-  una CA real (Let's Encrypt, CA corporativa) antes de exponer el stack fuera de `localhost`.
+- El certificado de desarrollo lo firma una CA local generada dentro del contenedor
+  `proxy-certs` (agosto 2026 — antes era un certificado autofirmado suelto, sin CA). El navegador
+  va a advertir hasta que esa CA se importe **una sola vez** al almacén de confianza del sistema
+  operativo — ver §5. Para un despliegue real, reemplazar el contenido del volumen `proxy-certs`
+  por un certificado de una CA real (Let's Encrypt, CA corporativa) antes de exponer el stack
+  fuera de `localhost`.
 - La inconsistencia `useHttpOnly="false"` de `context.xml` sigue existiendo en el código del core
   — está neutralizada por el proxy, no corregida en la fuente. Si algún día se corre `api` sin este
   proxy delante (ver nota en `docker-compose.yml`), esa inconsistencia vuelve a quedar expuesta.
@@ -120,8 +123,40 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 URLs resultantes (puertos por defecto, configurables en `.env` — ver `.env.example`):
 
 - `http://localhost:8083/openmrs` → redirige a...
-- `https://localhost:8446/openmrs` → panel real (aceptar la excepción del certificado autofirmado
-  la primera vez).
+- `https://localhost:8446/openmrs` → panel real.
+
+**Confiar la CA local una sola vez** (después de levantar el stack al menos una vez, para que
+`gen-dev-cert.sh` la genere y la exporte a `monitoring/proxy/ca/dev-ca.crt`):
+
+```powershell
+# Windows — requiere una terminal como administrador:
+certutil -addstore -f "ROOT" "monitoring\proxy\ca\dev-ca.crt"
+```
+
+```bash
+# macOS:
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain monitoring/proxy/ca/dev-ca.crt
+# Linux (Debian/Ubuntu):
+sudo cp monitoring/proxy/ca/dev-ca.crt /usr/local/share/ca-certificates/seguimiento-oncologico-dev-ca.crt && sudo update-ca-certificates
+```
+
+Después de importarla, cualquier navegador o cliente HTTP de esa máquina confía en
+`https://localhost:8446` sin advertencias — no hay que repetir el paso por navegador ni por
+proyecto que consuma este backend en modo dev (ej. `seguimiento-oncologico-web`). Si se borra el
+volumen `proxy-certs` (o se corre `docker compose down -v`), la CA se regenera con una identidad
+nueva y hay que volver a importarla una vez.
+
+**Por qué no un certificado autofirmado suelto (el diseño anterior a agosto 2026) ni una
+herramienta de confianza instalada solo en el host** (se probaron ambos en esta sesión y se
+descartaron): un certificado autofirmado sin CA obliga a click-through manual del navegador en
+*cada* origen que lo use, lo que entrena el hábito equivocado de aceptar advertencias de seguridad
+sin mirarlas — justo lo opuesto de lo que este proxy existe para reforzar. Generar la CA con una
+herramienta instalada solo en el host (se probó con `mkcert` nativo de Windows) resolvía el
+síntoma en esa máquina puntual, pero no es reproducible: cualquier otra máquina, o esta misma tras
+una reinstalación, no tendría esa CA ya confiada de antemano por casualidad de otro proyecto. Una
+CA generada dentro del contenedor, exportada por bind mount, e importada una vez por quien
+despliega, es la versión que funciona igual en cualquier máquina sin depender de estado previo no
+documentado.
 
 ## 6. Cómo se prueba
 

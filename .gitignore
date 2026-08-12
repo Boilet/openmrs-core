@@ -88,3 +88,6 @@ nb-configuration.xml
 ### Liquibase snapshot files ###
 liquibase/snapshots/*.xml
 #############
+
+# Certificado de dev del proxy TLS (generado por gen-dev-cert.sh, distinto por maquina)
+monitoring/proxy/ca/

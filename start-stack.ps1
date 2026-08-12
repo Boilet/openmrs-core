@@ -25,7 +25,7 @@ if ($Build) {
 
 Write-Host "`nStack started:"
 Write-Host "  OpenMRS UI     : https://localhost:$($env:OMRS_HTTPS_HOST_PORT ?? '8443')/openmrs  (admin / $($env:OMRS_ADMIN_USER_PASSWORD ?? 'Admin123'))"
-Write-Host "                   Certificado autofirmado de dev: el navegador va a advertir la primera vez, aceptar la excepcion."
+Write-Host "                   Certificado de dev firmado por una CA local (monitoring/proxy/ca/dev-ca.crt) - importarla UNA VEZ al almacen de confianza del sistema (ver docs/arquitectura-seguridad.md #5) o el navegador va a advertir."
 Write-Host "                   http://localhost:$($env:OMRS_HTTP_HOST_PORT ?? '8083')/openmrs redirige automaticamente a HTTPS."
 Write-Host "  Scheduler      : http://localhost:$($env:OMRS_SCHEDULER_HOST_PORT ?? '9003')"
 Write-Host "  Grafana        : http://localhost:$($env:GRAFANA_HOST_PORT ?? '3010')  (admin / $($env:GRAFANA_ADMIN_PASSWORD ?? 'Admin123'))"
