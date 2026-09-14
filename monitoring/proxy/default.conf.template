@@ -74,9 +74,23 @@ server {
 		proxy_cookie_flags ~ secure httponly samesite=lax;
 	}
 
-	# Enlace de la teleconsulta del paciente: unico endpoint del backend que atiende sin
-	# autenticacion, por lo que es el unico que necesita limitacion de tasa (ver limit_req_zone).
+	# Enlace de la teleconsulta del paciente: endpoint del backend que atiende sin
+	# autenticacion, por lo que necesita limitacion de tasa (ver limit_req_zone).
 	location ^~ /openmrs/module/seguimientoOncologico/telemedicinaInvitado.json {
+		limit_req zone=telemedicina_invitado burst=10 nodelay;
+
+		proxy_pass http://${UPSTREAM};
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto https;
+		proxy_cookie_flags ~ secure httponly samesite=lax;
+	}
+
+	# Reporte de síntomas del paciente (portal ePRO): el otro endpoint que atiende sin
+	# autenticación. Misma limitación de tasa que el enlace de la teleconsulta — no protege contra
+	# adivinar el token (256 bits por hash, sin enumeración posible) sino contra saturar la base.
+	location ^~ /openmrs/ws/rest/v1/reportepaciente {
 		limit_req zone=telemedicina_invitado burst=10 nodelay;
 
 		proxy_pass http://${UPSTREAM};
