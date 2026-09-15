@@ -101,6 +101,19 @@ server {
 		proxy_cookie_flags ~ secure httponly samesite=lax;
 	}
 
+	# Resumen del paciente (lectura del portal): mismo tratamiento que la escritura - es el
+	# mismo dato clinico sensible y la misma ausencia de autenticacion tradicional.
+	location ^~ /openmrs/ws/rest/v1/resumenpaciente {
+		limit_req zone=telemedicina_invitado burst=10 nodelay;
+
+		proxy_pass http://${UPSTREAM};
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto https;
+		proxy_cookie_flags ~ secure httponly samesite=lax;
+	}
+
 	location / {
 		proxy_pass http://${UPSTREAM};
 		proxy_set_header Host $host;
