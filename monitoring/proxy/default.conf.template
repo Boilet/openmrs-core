@@ -19,15 +19,24 @@
 # paciente que recarga su sala y ridiculo para un atacante.
 limit_req_zone $binary_remote_addr zone=telemedicina_invitado:1m rate=30r/m;
 
+# Log de acceso SIN query ni Referer. La búsqueda de pacientes viaja como `?q=<nombre o RUT>` y la
+# URL de la aplicación (con ese `?q=`) llegaba además en el Referer: con el formato `main` los dos
+# quedaban escritos en el log — datos de salud identificables en un archivo sin el tratamiento que
+# exige la Ley 21.719 (auditoría de sept. 2026, 15 líneas reales). `$uri` no lleva la query. Va en
+# cada server{}: un access_log a nivel http se sumaría al `main` de nginx.conf en vez de reemplazarlo.
+log_format sin_datos_personales '$remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent "$http_user_agent"';
+
 server {
 	listen 8080;
 	server_name _;
+	access_log /var/log/nginx/access.log sin_datos_personales;
 	return 301 https://$host:${HTTPS_PORT}$request_uri;
 }
 
 server {
 	listen 8443 ssl;
 	server_name _;
+	access_log /var/log/nginx/access.log sin_datos_personales;
 
 	# Ningún `;` en la ruta. Tomcat descarta los parámetros de ruta (`/telemedicina;x=1/invitado`
 	# llega al mismo controlador), pero nginx no reconoce esa URL en las `location` con límite de tasa
@@ -47,7 +56,7 @@ server {
 	add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
 	add_header X-Content-Type-Options "nosniff" always;
 	add_header X-Frame-Options "DENY" always;
-	add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+	add_header Referrer-Policy "strict-origin" always;
 
 	client_max_body_size 20m;
 
