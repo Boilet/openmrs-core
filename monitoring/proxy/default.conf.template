@@ -29,6 +29,15 @@ server {
 	listen 8443 ssl;
 	server_name _;
 
+	# Ningún `;` en la ruta. Tomcat descarta los parámetros de ruta (`/telemedicina;x=1/invitado`
+	# llega al mismo controlador), pero nginx no reconoce esa URL en las `location` con límite de tasa
+	# y la mandaba al bloque general, sin límite: medido en sept. 2026, 40 de 40 respuestas 200 donde
+	# la ruta normal corta en la 12. Nada legítimo de esta aplicación lleva `;` en la ruta ($uri ya
+	# viene decodificado, así que cubre también %3B).
+	if ($uri ~ ";") {
+		return 400;
+	}
+
 	ssl_certificate     /etc/nginx/certs/dev.crt;
 	ssl_certificate_key /etc/nginx/certs/dev.key;
 	ssl_protocols TLSv1.2 TLSv1.3;
@@ -75,8 +84,9 @@ server {
 	}
 
 	# Enlace de la teleconsulta del paciente: endpoint del backend que atiende sin
-	# autenticacion, por lo que necesita limitacion de tasa (ver limit_req_zone).
-	location ^~ /openmrs/module/seguimientoOncologico/telemedicinaInvitado.json {
+	# autenticacion, por lo que necesita limitacion de tasa (ver limit_req_zone). Es POST desde
+	# sept. 2026 (antes GET telemedicinaInvitado.json, que grababa el consentimiento desde un GET).
+	location ^~ /openmrs/ws/rest/v1/telemedicina/invitado {
 		limit_req zone=telemedicina_invitado burst=10 nodelay;
 
 		proxy_pass http://${UPSTREAM};
