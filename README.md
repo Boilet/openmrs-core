@@ -162,7 +162,7 @@ TAG=nightly docker compose -f docker-compose.yml up
 ```
 It is also possible to run a development version of an image with:
 ```bash
-TAG=dev docker compose up
+TAG=2.8.x-amazoncorretto-17 docker compose up
 ```
 All development versions contain dev suffix. The cache suffix is for use by our CI.
 

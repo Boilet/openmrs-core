@@ -18,12 +18,12 @@ services:
             #- ./initial_test_db.sql:/docker-entrypoint-initdb.d/initial_test_db.sql
 
     api:
-        image: openmrs/openmrs-core:${TAG:-dev}
+        image: openmrs/openmrs-core:${TAG:-2.8.x-amazoncorretto-17}
         build:
             target: dev
             context: .    
             cache_from:
-                -   openmrs/openmrs-core:${TAG:-dev}
+                -   openmrs/openmrs-core:${TAG:-2.8.x-amazoncorretto-17}
         # !override reemplaza la lista de puertos del docker-compose.yml base en vez de
         # concatenarla (Compose por defecto agrega, no reemplaza, los items de "ports").
         # 8080 NO se publica aqui a proposito (igual que en el docker-compose.yml base): el unico
@@ -43,7 +43,19 @@ services:
             OMRS_BUILD_ARGS: ${OMRS_BUILD_ARGS:-}
         volumes:
             - ./:/openmrs_core
-            - ./target/data:/openmrs/data/
+            - ./target/data-28:/openmrs/data/
+            # El cache de modulos del bind mount queda con dueno root y Windows no lo deja borrar
+            # (ni desde el host, ni desde WSL, ni desde un contenedor root: medido). Se monta un
+            # directorio VACIO encima para que OpenMRS lo regenere limpio -- sin eso, un cache a medio
+            # escribir rompe la carga de un modulo ajeno (webservices.rest quedo con
+            # CommonsMultipartResolver faltante y la API respondia 500).
+            - ./target/cache-limpio:/openmrs/data/.openmrs-lib-cache
+            # Módulos: el arranque borra y recopia este directorio desde el seed en CADA arranque.
+            # Si queda un archivo con dueño root (por una copia hecha a mano con `docker exec`), el
+            # contenedor --que no corre como root-- no puede borrarlo, la recopia falla y legacyui
+            # queda a medias: como webservices.rest y seguimientoOncologico DEPENDEN de él, ninguno
+            # arranca. Montar un directorio vacío lo evita.
+            - ./target/modulos-limpios:/openmrs/data/modules
             # Semilla de modulos para desarrollo local (webservices.rest + seguimientooncologico):
             # se copia a data/modules en cada arranque via startup-init.sh, sobreviviendo tanto al
             # wipe de esa carpeta como a la recreacion del contenedor.
