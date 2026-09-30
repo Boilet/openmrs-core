@@ -49,7 +49,7 @@ services:
             # directorio VACIO encima para que OpenMRS lo regenere limpio -- sin eso, un cache a medio
             # escribir rompe la carga de un modulo ajeno (webservices.rest quedo con
             # CommonsMultipartResolver faltante y la API respondia 500).
-            - ./target/cache-limpio:/openmrs/data/.openmrs-lib-cache
+            - ./target/cache-docs:/openmrs/data/.openmrs-lib-cache
             # Módulos: el arranque borra y recopia este directorio desde el seed en CADA arranque.
             # Si queda un archivo con dueño root (por una copia hecha a mano con `docker exec`), el
             # contenedor --que no corre como root-- no puede borrarlo, la recopia falla y legacyui
